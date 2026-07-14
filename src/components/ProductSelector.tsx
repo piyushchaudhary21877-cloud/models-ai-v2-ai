@@ -8,6 +8,8 @@ import React, { useState, useEffect } from "react";
 import { Grid, Sparkles, AlertCircle, Palette } from "lucide-react";
 import { ProductPreset, PRODUCTS } from "../data/templates";
 import { MockupScene, LogoData } from "../types";
+// @ts-ignore
+import indianModelImg from "../assets/images/model_tshirt_mockup_1783928243265.jpg";
 
 const extractDominantColor = (imageSrc: string): Promise<string> => {
   return new Promise((resolve) => {
@@ -612,6 +614,84 @@ export default function ProductSelector({
             </button>
           </form>
         )}
+
+        {/* Premium Lifestyle Backdrop Presets */}
+        <div className="space-y-2 pt-3 border-t border-white/5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block">Premium Backdrop Presets</span>
+            {customScene && (
+              <button
+                type="button"
+                onClick={() => {
+                  onCustomSceneChange(null);
+                  const event = new CustomEvent("merch-mockup-notification", {
+                    detail: { text: "Reset to flat template mockup", type: "info" },
+                  });
+                  window.dispatchEvent(event);
+                }}
+                className="text-[10px] font-semibold text-zinc-500 hover:text-zinc-400 transition-colors"
+              >
+                Reset backdrop
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              {
+                id: "indian-model-preset",
+                name: "Indian Model (Studio T-Shirt)",
+                imageUrl: indianModelImg,
+                isAiGenerated: true,
+                productType: "tshirt",
+              }
+            ].map((preset) => {
+              const isSelected = customScene?.id === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => {
+                    if (isSelected) {
+                      onCustomSceneChange(null);
+                      const event = new CustomEvent("merch-mockup-notification", {
+                        detail: { text: "Reset to flat template mockup", type: "info" },
+                      });
+                      window.dispatchEvent(event);
+                    } else {
+                      onCustomSceneChange({
+                        id: preset.id,
+                        name: preset.name,
+                        imageUrl: preset.imageUrl,
+                        isAiGenerated: preset.isAiGenerated,
+                        productType: preset.productType,
+                      });
+                      const event = new CustomEvent("merch-mockup-notification", {
+                        detail: { text: `Applied: ${preset.name}`, type: "info" },
+                      });
+                      window.dispatchEvent(event);
+                    }
+                  }}
+                  className={`p-2 rounded-xl text-left border cursor-pointer select-none focus:outline-none transition-all flex flex-col justify-between h-16 bg-cover bg-center relative overflow-hidden group ${
+                    isSelected
+                      ? "ring-1 ring-amber-500 border-transparent shadow-lg shadow-amber-500/10 text-white"
+                      : "border-white/5 text-zinc-300 hover:border-zinc-700"
+                  }`}
+                  style={{ backgroundImage: `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.85)), url(${preset.imageUrl})` }}
+                >
+                  <div className="z-10 flex flex-col h-full justify-between w-full">
+                    <span className="text-[10px] font-bold leading-tight drop-shadow-md text-zinc-100 group-hover:text-white transition-colors">{preset.name}</span>
+                    <span className="text-[8px] text-zinc-400 font-medium drop-shadow-sm group-hover:text-zinc-200 transition-colors">
+                      {isSelected ? "Active Backdrop" : "Apply Backdrop"}
+                    </span>
+                  </div>
+                  {isSelected && (
+                    <div className="absolute inset-0 border border-amber-500 rounded-xl pointer-events-none" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {error && (
           <div className="flex items-start space-x-2 bg-red-950/40 border border-red-500/20 text-red-400 p-3 rounded-lg text-[11px] leading-relaxed">

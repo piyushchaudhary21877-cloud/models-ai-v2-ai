@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useEffect, useState } from "react";
-import { Move, Info, ZoomIn, ZoomOut, Maximize, Hand, MousePointer, Grid, Ruler, AlertTriangle } from "lucide-react";
+import { Move, Info, ZoomIn, ZoomOut, Maximize, Hand, MousePointer, Grid, Ruler, AlertTriangle, Layers, Sparkles, GripVertical, ChevronUp, ChevronDown, Type } from "lucide-react";
 import { ProductPreset } from "../data/templates";
 import { LogoTransform, LogoData, MockupScene, PunchlineSettings } from "../types";
 import { loadImage } from "../utils/imageUtils";
@@ -19,11 +19,12 @@ interface MockupEditorProps {
   isQuickPreview?: boolean;
   isAdjusting?: boolean;
   punchline?: PunchlineSettings;
+  onPunchlineChange?: (settings: PunchlineSettings) => void;
   snapToGrid?: boolean;
 }
 
 // Helper to generate a procedural texture pattern canvas
-function createTexturePattern(type: "grain" | "heather" | "distressed", intensity: number): HTMLCanvasElement {
+function createTexturePattern(type: "grain" | "heather" | "distressed" | "heavy_cotton" | "vintage_wash" | "satin" | "denim", intensity: number): HTMLCanvasElement {
   const pCanvas = document.createElement("canvas");
   
   if (type === "grain") {
@@ -111,6 +112,148 @@ function createTexturePattern(type: "grain" | "heather" | "distressed", intensit
         pCtx.stroke();
       }
     }
+  } else if (type === "heavy_cotton") {
+    pCanvas.width = 128;
+    pCanvas.height = 128;
+    const pCtx = pCanvas.getContext("2d");
+    if (pCtx) {
+      pCtx.clearRect(0, 0, 128, 128);
+      // Heavy cotton weave grid structure
+      pCtx.strokeStyle = `rgba(0, 0, 0, ${intensity * 0.16})`;
+      pCtx.lineWidth = 1.2;
+      for (let i = 0; i < 128; i += 6) {
+        pCtx.beginPath();
+        pCtx.moveTo(i, 0);
+        pCtx.lineTo(i, 128);
+        pCtx.stroke();
+
+        pCtx.beginPath();
+        pCtx.moveTo(0, i);
+        pCtx.lineTo(128, i);
+        pCtx.stroke();
+      }
+      // Light weave highlight lines
+      pCtx.strokeStyle = `rgba(255, 255, 255, ${intensity * 0.12})`;
+      pCtx.lineWidth = 0.8;
+      for (let i = 3; i < 128; i += 6) {
+        pCtx.beginPath();
+        pCtx.moveTo(i, 0);
+        pCtx.lineTo(i, 128);
+        pCtx.stroke();
+
+        pCtx.beginPath();
+        pCtx.moveTo(0, i);
+        pCtx.lineTo(128, i);
+        pCtx.stroke();
+      }
+      // Organic fiber speckles
+      for (let i = 0; i < 400; i++) {
+        const x = Math.random() * 128;
+        const y = Math.random() * 128;
+        const size = 1.0 + Math.random() * 1.5;
+        const colorVal = Math.random() > 0.5 ? 255 : 0;
+        const alpha = Math.random() * intensity * 0.18;
+        pCtx.fillStyle = `rgba(${colorVal}, ${colorVal}, ${colorVal}, ${alpha})`;
+        pCtx.fillRect(x, y, size, size);
+      }
+    }
+  } else if (type === "vintage_wash") {
+    pCanvas.width = 256;
+    pCanvas.height = 256;
+    const pCtx = pCanvas.getContext("2d");
+    if (pCtx) {
+      pCtx.clearRect(0, 0, 256, 256);
+      // Soft, uneven bleach/dye washing variations
+      for (let i = 0; i < 40; i++) {
+        const x = Math.random() * 256;
+        const y = Math.random() * 256;
+        const r = 15 + Math.random() * 40;
+        const isLight = Math.random() > 0.4;
+        const colorVal = isLight ? 255 : 0;
+        const alpha = Math.random() * intensity * 0.22;
+
+        const grad = pCtx.createRadialGradient(x, y, 0, x, y, r);
+        grad.addColorStop(0, `rgba(${colorVal}, ${colorVal}, ${colorVal}, ${alpha})`);
+        grad.addColorStop(1, `rgba(${colorVal}, ${colorVal}, ${colorVal}, 0)`);
+        
+        pCtx.fillStyle = grad;
+        pCtx.beginPath();
+        pCtx.arc(x, y, r, 0, Math.PI * 2);
+        pCtx.fill();
+      }
+      // Vintage crackle lines
+      pCtx.strokeStyle = `rgba(0, 0, 0, ${intensity * 0.25})`;
+      pCtx.lineWidth = 0.6;
+      for (let i = 0; i < 8; i++) {
+        pCtx.beginPath();
+        let cx = Math.random() * 256;
+        let cy = Math.random() * 256;
+        pCtx.moveTo(cx, cy);
+        for (let j = 0; j < 5; j++) {
+          cx += (Math.random() - 0.5) * 35;
+          cy += (Math.random() - 0.5) * 35;
+          pCtx.lineTo(cx, cy);
+        }
+        pCtx.stroke();
+      }
+    }
+  } else if (type === "satin") {
+    pCanvas.width = 256;
+    pCanvas.height = 256;
+    const pCtx = pCanvas.getContext("2d");
+    if (pCtx) {
+      pCtx.clearRect(0, 0, 256, 256);
+      // Soft diagonal satin gloss bands
+      pCtx.lineWidth = 14;
+      for (let i = -256; i < 512; i += 32) {
+        const isHighlight = Math.random() > 0.45;
+        const colorVal = isHighlight ? 255 : 0;
+        const alpha = Math.random() * intensity * 0.16;
+        pCtx.strokeStyle = `rgba(${colorVal}, ${colorVal}, ${colorVal}, ${alpha})`;
+        
+        pCtx.beginPath();
+        pCtx.moveTo(i, -50);
+        pCtx.lineTo(i + 300, 300);
+        pCtx.stroke();
+      }
+      // Linear gloss gradient
+      const grad = pCtx.createLinearGradient(0, 0, 256, 256);
+      grad.addColorStop(0, `rgba(255, 255, 255, ${intensity * 0.14})`);
+      grad.addColorStop(0.5, `rgba(0, 0, 0, ${intensity * 0.08})`);
+      grad.addColorStop(1, `rgba(255, 255, 255, ${intensity * 0.14})`);
+      pCtx.fillStyle = grad;
+      pCtx.fillRect(0, 0, 256, 256);
+    }
+  } else if (type === "denim") {
+    pCanvas.width = 128;
+    pCanvas.height = 128;
+    const pCtx = pCanvas.getContext("2d");
+    if (pCtx) {
+      pCtx.clearRect(0, 0, 128, 128);
+      // Indigo-washed diagonal denim twill weaves
+      pCtx.strokeStyle = `rgba(0, 0, 0, ${intensity * 0.28})`;
+      pCtx.lineWidth = 1.6;
+      for (let i = -128; i < 256; i += 4) {
+        pCtx.beginPath();
+        pCtx.moveTo(i, 0);
+        pCtx.lineTo(i + 128, 128);
+        pCtx.stroke();
+      }
+      // High-contrast white horizontal stitch fibers
+      pCtx.strokeStyle = `rgba(255, 255, 255, ${intensity * 0.22})`;
+      pCtx.lineWidth = 1.0;
+      for (let i = -128; i < 256; i += 4) {
+        pCtx.beginPath();
+        pCtx.moveTo(i + 2, 0);
+        pCtx.lineTo(i + 130, 128);
+        pCtx.stroke();
+      }
+      // Horizontal fabric wash streaks
+      pCtx.fillStyle = `rgba(30, 60, 120, ${intensity * 0.07})`;
+      for (let i = 0; i < 15; i++) {
+        pCtx.fillRect(0, Math.random() * 128, 128, 3 + Math.random() * 6);
+      }
+    }
   }
   
   return pCanvas;
@@ -126,6 +269,7 @@ export default function MockupEditor({
   isQuickPreview = false,
   isAdjusting = false,
   punchline,
+  onPunchlineChange,
   snapToGrid = false,
 }: MockupEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -138,17 +282,158 @@ export default function MockupEditor({
   const [showGuidelines, setShowGuidelines] = useState(true);
   const [isWireframeMode, setIsWireframeMode] = useState(false);
 
+  // --- Visual Layer Ordering States and Handlers ---
+  const [editorLayers, setEditorLayers] = useState<string[]>(["product_overlay", "logo", "punchline"]);
+  const [showLayersPanel, setShowLayersPanel] = useState(false);
+  const [draggedEditorLayerId, setDraggedEditorLayerId] = useState<string | null>(null);
+  const [dragOverEditorLayerId, setDragOverEditorLayerId] = useState<string | null>(null);
+
+  // Synchronize canvas layer order with parent's sidebar layerIndex when sidebar acts
+  useEffect(() => {
+    if (!punchline) return;
+    const sloganIndex = editorLayers.indexOf("punchline");
+    const logoIndex = editorLayers.indexOf("logo");
+    
+    if (sloganIndex !== -1 && logoIndex !== -1) {
+      const isSloganBelow = sloganIndex < logoIndex;
+      const targetSloganBelow = punchline.layerIndex === "below";
+      
+      if (isSloganBelow !== targetSloganBelow) {
+        const newLayers = [...editorLayers];
+        newLayers.splice(sloganIndex, 1);
+        const currentLogoIndex = newLayers.indexOf("logo");
+        if (targetSloganBelow) {
+          newLayers.splice(currentLogoIndex, 0, "punchline");
+        } else {
+          newLayers.splice(currentLogoIndex + 1, 0, "punchline");
+        }
+        setEditorLayers(newLayers);
+      }
+    }
+  }, [punchline?.layerIndex]);
+
+  const handleEditorDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedEditorLayerId(id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleEditorDragOver = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (draggedEditorLayerId && draggedEditorLayerId !== targetId) {
+      setDragOverEditorLayerId(targetId);
+    }
+  };
+
+  const handleEditorDragEnd = () => {
+    setDraggedEditorLayerId(null);
+    setDragOverEditorLayerId(null);
+  };
+
+  const handleEditorDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    setDragOverEditorLayerId(null);
+    if (draggedEditorLayerId && draggedEditorLayerId !== targetId) {
+      const oldIndex = editorLayers.indexOf(draggedEditorLayerId);
+      const newIndex = editorLayers.indexOf(targetId);
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newLayers = [...editorLayers];
+        newLayers.splice(oldIndex, 1);
+        newLayers.splice(newIndex, 0, draggedEditorLayerId);
+        
+        setEditorLayers(newLayers);
+        
+        // Push the new relative order up to the parent component
+        const newSloganIndex = newLayers.indexOf("punchline");
+        const newLogoIndex = newLayers.indexOf("logo");
+        if (newSloganIndex !== -1 && newLogoIndex !== -1 && punchline && onPunchlineChange) {
+          const isSloganBelow = newSloganIndex < newLogoIndex;
+          const targetLayerIndex = isSloganBelow ? "below" : "above";
+          if (punchline.layerIndex !== targetLayerIndex) {
+            onPunchlineChange({
+              ...punchline,
+              layerIndex: targetLayerIndex,
+            });
+          }
+        }
+        
+        const labels: Record<string, string> = {
+          logo: "Graphic Logo",
+          punchline: "Slogan Text",
+          product_overlay: "Fabric Creases"
+        };
+        const event = new CustomEvent("merch-mockup-notification", {
+          detail: { 
+            text: `Reordered: ${labels[draggedEditorLayerId]} relative to ${labels[targetId]}`, 
+            type: "info" 
+          },
+        });
+        window.dispatchEvent(event);
+      }
+    }
+    setDraggedEditorLayerId(null);
+  };
+
+  const moveEditorLayer = (id: string, direction: "up" | "down") => {
+    const currentIndex = editorLayers.indexOf(id);
+    if (currentIndex === -1) return;
+    
+    const targetIndex = direction === "up" ? currentIndex + 1 : currentIndex - 1;
+    if (targetIndex < 0 || targetIndex >= editorLayers.length) return;
+    
+    const newLayers = [...editorLayers];
+    const temp = newLayers[currentIndex];
+    newLayers[currentIndex] = newLayers[targetIndex];
+    newLayers[targetIndex] = temp;
+    
+    setEditorLayers(newLayers);
+    
+    // Push the new relative order up to the parent component
+    const newSloganIndex = newLayers.indexOf("punchline");
+    const newLogoIndex = newLayers.indexOf("logo");
+    if (newSloganIndex !== -1 && newLogoIndex !== -1 && punchline && onPunchlineChange) {
+      const isSloganBelow = newSloganIndex < newLogoIndex;
+      const targetLayerIndex = isSloganBelow ? "below" : "above";
+      if (punchline.layerIndex !== targetLayerIndex) {
+        onPunchlineChange({
+          ...punchline,
+          layerIndex: targetLayerIndex,
+        });
+      }
+    }
+    
+    const labels: Record<string, string> = {
+      logo: "Graphic Logo",
+      punchline: "Slogan Text",
+      product_overlay: "Fabric Creases"
+    };
+    const event = new CustomEvent("merch-mockup-notification", {
+      detail: { 
+        text: `Moved ${labels[id]} ${direction}`, 
+        type: "info" 
+      },
+    });
+    window.dispatchEvent(event);
+  };
+  // --------------------------------------------------
+
   // Helper to calculate estimated physical print size based on current logo scale
   const estimatedDimensions = React.useMemo(() => {
     if (!logo || !logo.width || !logo.height || !product) return null;
     
     const physicalBounds: Record<string, { w: number, h: number, unit: string }> = {
       tshirt: { w: 12, h: 16, unit: "in" },
+      oversized_tshirt: { w: 14, h: 18, unit: "in" },
+      polo_shirt: { w: 12, h: 14, unit: "in" },
       hoodie: { w: 14, h: 16, unit: "in" },
+      sweatshirt: { w: 13, h: 15, unit: "in" },
+      tank_top: { w: 10, h: 14, unit: "in" },
       totebag: { w: 10, h: 10, unit: "in" },
       mug: { w: 8.5, h: 3.5, unit: "in" },
-      bottle: { w: 6, h: 5, unit: "in" },
+      water_bottle: { w: 5.5, h: 6.5, unit: "in" },
       phonecase: { w: 2.5, h: 5.5, unit: "in" },
+      mouse_pad: { w: 10, h: 8, unit: "in" },
+      notebook: { w: 5, h: 7, unit: "in" },
+      sticker: { w: 3, h: 3, unit: "in" },
       cap: { w: 4.5, h: 2.5, unit: "in" },
       poster: { w: 18, h: 24, unit: "in" }
     };
@@ -332,6 +617,7 @@ export default function MockupEditor({
 
       try {
         let sceneImg: HTMLImageElement | null = null;
+        let productOverlayImg: HTMLImageElement | null = null;
         if (customScene && customScene.imageUrl && !(isQuickPreview || isAdjusting)) {
           try {
             sceneImg = await loadImage(customScene.imageUrl);
@@ -531,49 +817,65 @@ export default function MockupEditor({
           }
         }
 
-        // Encapsulate the raw print design drawing (Slogan & Symmetrical Logo Graphic)
+        // Helper to draw a single layer dynamically
+        const drawLayer = async (layerName: string, targetCtx: CanvasRenderingContext2D) => {
+          if (layerName === "logo") {
+            if (logoImg && active) {
+              targetCtx.save();
+              targetCtx.globalAlpha = transform.opacity;
+              targetCtx.globalCompositeOperation = (targetCtx === ctx)
+                ? ((isQuickPreview || isAdjusting) ? "source-over" : transform.blendMode)
+                : "source-over";
+
+              if (transform.smartCrop) {
+                targetCtx.beginPath();
+                targetCtx.rect(pX, pY, pW, pH);
+                targetCtx.clip();
+              }
+
+              targetCtx.translate(targetX, targetY);
+              if (transform.rotation !== 0) {
+                targetCtx.rotate((transform.rotation * Math.PI) / 180);
+              }
+              
+              if (transform.skewX || transform.skewY) {
+                const sx = Math.tan((transform.skewX || 0) * Math.PI / 180);
+                const sy = Math.tan((transform.skewY || 0) * Math.PI / 180);
+                targetCtx.transform(1, sy, sx, 1, 0, 0);
+              }
+
+              if (transform.flipX || transform.flipY) {
+                targetCtx.scale(transform.flipX ? -1 : 1, transform.flipY ? -1 : 1);
+              }
+
+              if (transform.dropShadowEnabled) {
+                const intensity = transform.dropShadowIntensity ?? 0.5;
+                targetCtx.shadowColor = `rgba(0, 0, 0, ${intensity * 0.75})`;
+                targetCtx.shadowBlur = intensity * 16;
+                targetCtx.shadowOffsetX = intensity * 5;
+                targetCtx.shadowOffsetY = intensity * 8;
+              }
+
+              targetCtx.drawImage(logoImg, -finalW / 2, -finalH / 2, finalW, finalH);
+              targetCtx.restore();
+            }
+          } else if (layerName === "punchline") {
+            drawPunchline(targetCtx);
+          } else if (layerName === "product_overlay") {
+            // Only draw SVG overlay if not AI customScene and productOverlayImg is loaded
+            if (!customScene && productOverlayImg && active) {
+              targetCtx.save();
+              targetCtx.globalAlpha = 0.85; // highly realistic transparent blending
+              targetCtx.drawImage(productOverlayImg, 0, 0, VIEWPORT_SIZE, VIEWPORT_SIZE);
+              targetCtx.restore();
+            }
+          }
+        };
+
+        // Encapsulate the dynamic layered print design and mockup shading drawing
         const drawDesign = async (targetCtx: CanvasRenderingContext2D) => {
-          // 1. Draw Slogan (if layer is below)
-          if (punchline?.layerIndex === "below") {
-            drawPunchline(targetCtx);
-          }
-
-          // 2. Draw Graphic Logo Artwork
-          if (logoImg && active) {
-            targetCtx.save();
-            targetCtx.globalAlpha = transform.opacity;
-            targetCtx.globalCompositeOperation = (targetCtx === ctx)
-              ? ((isQuickPreview || isAdjusting) ? "source-over" : transform.blendMode)
-              : "source-over";
-
-            if (transform.smartCrop) {
-              targetCtx.beginPath();
-              targetCtx.rect(pX, pY, pW, pH);
-              targetCtx.clip();
-            }
-
-            targetCtx.translate(targetX, targetY);
-            if (transform.rotation !== 0) {
-              targetCtx.rotate((transform.rotation * Math.PI) / 180);
-            }
-            
-            if (transform.skewX || transform.skewY) {
-              const sx = Math.tan((transform.skewX || 0) * Math.PI / 180);
-              const sy = Math.tan((transform.skewY || 0) * Math.PI / 180);
-              targetCtx.transform(1, sy, sx, 1, 0, 0);
-            }
-
-            if (transform.flipX || transform.flipY) {
-              targetCtx.scale(transform.flipX ? -1 : 1, transform.flipY ? -1 : 1);
-            }
-
-            targetCtx.drawImage(logoImg, -finalW / 2, -finalH / 2, finalW, finalH);
-            targetCtx.restore();
-          }
-
-          // 3. Draw Slogan (if layer is above)
-          if (punchline?.layerIndex !== "below") {
-            drawPunchline(targetCtx);
+          for (const layer of editorLayers) {
+            await drawLayer(layer, targetCtx);
           }
         };
 
@@ -588,7 +890,7 @@ export default function MockupEditor({
             await drawDesign(offCtx);
             
             // Apply the procedural fabric texture pattern overlay
-            const texType = transform.textureType as "grain" | "heather" | "distressed";
+            const texType = transform.textureType as "grain" | "heather" | "distressed" | "heavy_cotton" | "vintage_wash" | "satin" | "denim";
             const texIntensity = transform.textureIntensity || 0.35;
             const texPatternCanvas = createTexturePattern(texType, texIntensity);
             
@@ -1379,6 +1681,59 @@ export default function MockupEditor({
                     Exceeds safe print bounds ({estimatedDimensions.maxW}x{estimatedDimensions.maxH} {estimatedDimensions.unit})
                   </span>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Fabric Texture Real-time Visual Indicator Overlay */}
+          {transform.textureType && transform.textureType !== "none" && (
+            <div className="absolute top-3 right-3 bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-lg p-2 shadow-xl pointer-events-auto z-10 flex items-center space-x-2.5 transition-all hover:border-amber-500/30 group cursor-help select-none">
+              <div className="relative w-8 h-8 rounded-md overflow-hidden border border-white/10 flex-shrink-0 bg-zinc-900 flex items-center justify-center">
+                {/* Real-time mini texture pattern preview */}
+                <div 
+                  className="absolute inset-0 opacity-90"
+                  style={{
+                    backgroundImage: `url(${createTexturePattern(transform.textureType, 1.0).toDataURL()})`,
+                    backgroundSize: "32px 32px"
+                  }}
+                />
+                <div className={`absolute inset-0 mix-blend-overlay ${
+                  transform.textureType === 'satin' ? 'bg-gradient-to-tr from-white/40 via-transparent to-white/40' :
+                  transform.textureType === 'denim' ? 'bg-blue-900/30' :
+                  transform.textureType === 'vintage_wash' ? 'bg-zinc-500/20' :
+                  'bg-zinc-700/10'
+                }`} />
+                <Layers className="h-4 w-4 text-zinc-400 mix-blend-difference relative z-10" />
+              </div>
+              <div className="flex flex-col pr-1 text-left font-sans">
+                <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                  <Sparkles className="h-2 w-2 text-amber-400" />
+                  Fabric Overlay
+                </span>
+                <span className="text-xs font-semibold text-zinc-200 capitalize">
+                  {(transform.textureType || "").replace("_", " ")}
+                </span>
+              </div>
+              
+              {/* Tooltip Description on hover */}
+              <div className="absolute top-full mt-2 right-0 w-52 bg-zinc-950/95 backdrop-blur-md border border-white/10 rounded-lg p-2.5 shadow-2xl opacity-0 scale-95 origin-top-right group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 pointer-events-none z-20">
+                <h5 className="text-[10px] text-amber-400 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <Layers className="h-3 w-3" />
+                  {(transform.textureType || "").replace("_", " ")}
+                </h5>
+                <p className="text-[10px] text-zinc-400 leading-relaxed font-sans">
+                  {transform.textureType === "heavy_cotton" && "Renders a premium heavy cotton canvas structure featuring realistic weave grids and organic fiber speckles."}
+                  {transform.textureType === "vintage_wash" && "Simulates direct-to-garment aging with soft wash gradients and authentic surface crackles."}
+                  {transform.textureType === "satin" && "Applies a luxurious diagonal silky luster with high-gloss sheen bands."}
+                  {transform.textureType === "denim" && "Simulates rich indigo twill textures using high-contrast twines and woven fiber threads."}
+                  {transform.textureType === "grain" && "Applies a classic sandy high-frequency noise overlay."}
+                  {transform.textureType === "heather" && "Blends light and dark flecks for a textured heather look."}
+                  {transform.textureType === "distressed" && "Simulates a rugged, worn-down weathered surface."}
+                </p>
+                <div className="mt-2 pt-1.5 border-t border-white/5 flex items-center justify-between text-[9px] text-zinc-500 font-medium">
+                  <span>Intensity: {Math.round((transform.textureIntensity || 0.35) * 100)}%</span>
+                  <span>Real-time Active</span>
+                </div>
               </div>
             </div>
           )}

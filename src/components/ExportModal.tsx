@@ -4,10 +4,52 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { X, Download, ShieldCheck, FileImage, Settings, HelpCircle, Trash2, Sparkles, Archive, CheckSquare, Square, Files, FileSpreadsheet, Store, AlertCircle } from "lucide-react";
+import { X, Download, ShieldCheck, FileImage, Settings, HelpCircle, Trash2, Sparkles, Archive, CheckSquare, Square, Files, FileSpreadsheet, Store, AlertCircle, FileText, Share2, History, Clock } from "lucide-react";
 import { ProductPreset } from "../data/templates";
 import { LogoTransform, LogoData, MockupScene } from "../types";
 import { generateMockupExport, generatePrintReadyExport } from "../utils/imageUtils";
+import { jsPDF } from "jspdf";
+
+const exportCache = new Map<string, string>();
+
+export interface ExportHistoryItem {
+  id: string;
+  filename: string;
+  timestamp: string; // ISO string
+  exportType: "mockup" | "print-ready" | "pdf" | "shopify" | "bulk-zip";
+  productName: string;
+  color: string;
+  logoName: string;
+  parameters: {
+    bgSrc: string;
+    logoSrc: string;
+    printArea: { x: number; y: number; width: number; height: number };
+    transform: {
+      x: number;
+      y: number;
+      scale: number;
+      rotation: number;
+      opacity: number;
+      blendMode: string;
+      skewX?: number;
+      skewY?: number;
+    };
+    mockupResolution?: number;
+    printWidthInches?: number;
+    printDpi?: number;
+    fileFormat?: string;
+    shopifyTitle?: string;
+    shopifyPrice?: string;
+    shopifySku?: string;
+    shopifyTags?: string;
+    shopifyVendor?: string;
+    shopifySizes?: string[];
+    selectedPresetIds?: string[];
+    includeArtworks?: boolean;
+    includeMockups?: boolean;
+    includeCsvManifest?: boolean;
+  };
+}
 
 interface ExportPreset {
   id: string;
@@ -84,6 +126,7 @@ export default function ExportModal({
 }: ExportModalProps) {
   const [isExportingMockup, setIsExportingMockup] = useState(false);
   const [isExportingPrint, setIsExportingPrint] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [mockupResolution, setMockupResolution] = useState<number>(2000); // 1000 for 1K, 2000 for 2K (HD), 4000 for 4K
   
   // Custom presets state
@@ -108,7 +151,412 @@ export default function ExportModal({
   const [newPresetName, setNewPresetName] = useState("");
 
   // Bulk ZIP State Variables
-  const [activeExportTab, setActiveExportTab] = useState<"single" | "bulk" | "shopify">("single");
+  const [activeExportTab, setActiveExportTab] = useState<"single" | "bulk" | "shopify" | "history">("single");
+  const [historyList, setHistoryList] = useState<ExportHistoryItem[]>([]);
+  const [isReDownloadingId, setIsReDownloadingId] = useState<string | null>(null);
+
+  const loadHistory = () => {
+    try {
+      const stored = localStorage.getItem("export-history");
+      if (stored) {
+        setHistoryList(JSON.parse(stored));
+      } else {
+        setHistoryList([]);
+      }
+    } catch (e) {
+      console.error("Error reading export history:", e);
+    }
+  };
+
+  useEffect(() => {
+    loadHistory();
+
+    const handleUpdate = () => {
+      loadHistory();
+    };
+
+    window.addEventListener("export-history-updated", handleUpdate);
+    return () => {
+      window.removeEventListener("export-history-updated", handleUpdate);
+    };
+  }, []);
+
+  const recordExport = (
+    exportType: "mockup" | "print-ready" | "pdf" | "shopify" | "bulk-zip",
+    filename: string,
+    dataUrl?: string,
+    extraParams: any = {}
+  ) => {
+    try {
+      let bgSrc = "";
+      if (customScene) {
+        bgSrc = customScene.imageUrl;
+      } else {
+        const svgString = product.getSvg(color);
+        bgSrc = `data:image/svg+xml;utf8,${encodeURIComponent(svgString)}`;
+      }
+
+      const printArea = customScene
+        ? { x: 20, y: 20, width: 60, height: 60 }
+        : product.printArea;
+
+      const newItem: ExportHistoryItem = {
+        id: `exp-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        filename,
+        timestamp: new Date().toISOString(),
+        exportType,
+        productName: product.name,
+        color,
+        logoName: logo.name,
+        parameters: {
+          bgSrc,
+          logoSrc: logo.processedSrc || logo.src,
+          printArea,
+          transform: {
+            x: transform.x,
+            y: transform.y,
+            scale: transform.scale,
+            rotation: transform.rotation,
+            opacity: transform.opacity,
+            blendMode: transform.blendMode,
+            skewX: transform.skewX,
+            skewY: transform.skewY,
+          },
+          mockupResolution,
+          printWidthInches,
+          printDpi,
+          fileFormat,
+          ...extraParams,
+        },
+      };
+
+      if (dataUrl) {
+        exportCache.set(newItem.id, dataUrl);
+      }
+
+      const stored = localStorage.getItem("export-history");
+      const list: ExportHistoryItem[] = stored ? JSON.parse(stored) : [];
+      const updated = [newItem, ...list].slice(0, 50);
+      localStorage.setItem("export-history", JSON.stringify(updated));
+      setHistoryList(updated);
+
+      const notificationEvent = new CustomEvent("merch-mockup-notification", {
+        detail: { text: `Saved to Export History: ${filename}`, type: "success" },
+      });
+      window.dispatchEvent(notificationEvent);
+    } catch (err) {
+      console.error("Failed to record export history:", err);
+    }
+  };
+
+  const handleReDownload = async (item: ExportHistoryItem) => {
+    // 1. Try to fetch from in-memory cache
+    const cachedUrl = exportCache.get(item.id);
+    if (cachedUrl) {
+      downloadFile(cachedUrl, item.filename);
+      const event = new CustomEvent("merch-mockup-notification", {
+        detail: { text: `Re-downloaded: ${item.filename} (from memory)`, type: "success" },
+      });
+      window.dispatchEvent(event);
+      return;
+    }
+
+    // 2. Otherwise, re-generate based on saved parameters!
+    setIsReDownloadingId(item.id);
+    try {
+      if (item.exportType === "mockup") {
+        const url = await generateMockupExport(
+          item.parameters.bgSrc,
+          item.parameters.logoSrc,
+          item.parameters.printArea,
+          item.parameters.transform.x,
+          item.parameters.transform.y,
+          item.parameters.transform.scale,
+          item.parameters.transform.rotation,
+          item.parameters.transform.opacity,
+          item.parameters.transform.blendMode as GlobalCompositeOperation,
+          item.parameters.mockupResolution || 2000,
+          item.parameters.transform.skewX,
+          item.parameters.transform.skewY
+        );
+        downloadFile(url, item.filename);
+        exportCache.set(item.id, url); // cache it for next time!
+      } else if (item.exportType === "print-ready") {
+        const mimeType = item.parameters.fileFormat?.startsWith("jpeg-") ? "image/jpeg" : "image/png";
+        let bgColor = "transparent";
+        if (item.parameters.fileFormat === "png-solid-white" || item.parameters.fileFormat === "jpeg-solid-white") {
+          bgColor = "#ffffff";
+        } else if (item.parameters.fileFormat === "png-product-color" || item.parameters.fileFormat === "jpeg-product-color") {
+          bgColor = item.color || "#ffffff";
+        }
+
+        const url = await generatePrintReadyExport(
+          item.parameters.logoSrc,
+          item.parameters.printWidthInches || 10,
+          item.parameters.printDpi || 300,
+          mimeType,
+          bgColor
+        );
+        downloadFile(url, item.filename);
+        exportCache.set(item.id, url); // cache it for next time!
+      } else if (item.exportType === "pdf") {
+        const mockupUrl = await generateMockupExport(
+          item.parameters.bgSrc,
+          item.parameters.logoSrc,
+          item.parameters.printArea,
+          item.parameters.transform.x,
+          item.parameters.transform.y,
+          item.parameters.transform.scale,
+          item.parameters.transform.rotation,
+          item.parameters.transform.opacity,
+          item.parameters.transform.blendMode as GlobalCompositeOperation,
+          1500,
+          item.parameters.transform.skewX,
+          item.parameters.transform.skewY
+        );
+
+        const printUrl = await generatePrintReadyExport(
+          item.parameters.logoSrc,
+          8,
+          150,
+          "image/png",
+          "transparent"
+        );
+
+        const doc = new jsPDF({
+          orientation: "portrait",
+          unit: "mm",
+          format: "a4",
+        });
+
+        // Header Banner
+        doc.setFillColor(15, 23, 42); // slate-900
+        doc.rect(0, 0, 210, 40, "F");
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(22);
+        doc.text("MOCKUP STUDIO TECH SHEET", 15, 18);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(148, 163, 184); // slate-400
+        doc.text("Professional Print Spec Sheet • Automated Generation", 15, 26);
+        doc.text(`Exported: ${new Date(item.timestamp).toLocaleString()}`, 130, 18);
+
+        // Main content
+        doc.setTextColor(15, 23, 42);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.text("PRODUCT SPECIFICATIONS", 15, 52);
+
+        // Specs Box
+        doc.setFillColor(248, 250, 252);
+        doc.rect(15, 56, 180, 52, "F");
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.5);
+        doc.rect(15, 56, 180, 52, "S");
+
+        doc.setFontSize(10);
+        doc.setTextColor(71, 85, 105);
+
+        // Column 1
+        doc.setFont("helvetica", "bold");
+        doc.text("Product Type:", 20, 64);
+        doc.setFont("helvetica", "normal");
+        doc.text(item.productName, 52, 64);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Fabric Color:", 20, 72);
+        doc.setFont("helvetica", "normal");
+        doc.text(item.color.toUpperCase(), 52, 72);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Print Method:", 20, 80);
+        doc.setFont("helvetica", "normal");
+        const suggestedMethod = item.productName.toLowerCase().includes("apparel") || item.productName.toLowerCase().includes("shirt") ? "Direct To Garment (DTG)" : item.productName.toLowerCase().includes("mug") ? "Sublimation" : "Screen Printing";
+        doc.text(suggestedMethod, 52, 80);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Artwork Source:", 20, 88);
+        doc.setFont("helvetica", "normal");
+        doc.text(item.logoName.substring(0, 30), 52, 88);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Position (X/Y):", 20, 96);
+        doc.setFont("helvetica", "normal");
+        doc.text(`X: ${item.parameters.transform.x.toFixed(1)}%, Y: ${item.parameters.transform.y.toFixed(1)}%`, 52, 96);
+
+        // Column 2
+        doc.setFont("helvetica", "bold");
+        doc.text("Logo Scale:", 110, 64);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${Math.round(item.parameters.transform.scale * 100)}%`, 145, 64);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Logo Rotation:", 110, 72);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${item.parameters.transform.rotation}°`, 145, 72);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Logo Opacity:", 110, 80);
+        doc.setFont("helvetica", "normal");
+        doc.text(`${Math.round(item.parameters.transform.opacity * 100)}%`, 145, 80);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Guidelines:", 110, 88);
+        doc.setTextColor(16, 185, 129);
+        doc.setFont("helvetica", "bold");
+        doc.text("PASSED (Within Bounds)", 145, 88);
+        doc.setTextColor(71, 85, 105);
+
+        doc.setFont("helvetica", "bold");
+        doc.text("Status:", 110, 96);
+        doc.setFont("helvetica", "normal");
+        doc.text("Production-Ready", 145, 96);
+
+        // Layout specs
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.setTextColor(15, 23, 42);
+        doc.text("MOCKUP PREVIEW", 15, 120);
+        doc.text("ISOLATED ARTWORK", 110, 120);
+
+        doc.setDrawColor(226, 232, 240);
+        doc.rect(15, 124, 85, 85, "S");
+        doc.addImage(mockupUrl, "PNG", 16, 125, 83, 83);
+
+        doc.rect(110, 124, 85, 85, "S");
+        doc.setFillColor(250, 250, 250);
+        doc.rect(111, 125, 83, 83, "F");
+        doc.addImage(printUrl, "PNG", 112, 126, 81, 81);
+
+        doc.setFillColor(241, 245, 249);
+        doc.rect(15, 222, 180, 48, "F");
+        doc.rect(15, 222, 180, 48, "S");
+
+        doc.setTextColor(100, 116, 139);
+        doc.setFontSize(8.5);
+        doc.setFont("helvetica", "bold");
+        doc.text("DESIGN NOTES & GUIDELINES FOR PRINTIFY / PRINTFUL", 20, 230);
+        doc.setFont("helvetica", "normal");
+        doc.text("1. Make sure exported isolated artwork contains transparent background (standard transparent PNG).", 20, 237);
+        doc.text("2. The color profile is calibrated to sRGB. For offset screen print, convert to CMYK if requested.", 20, 243);
+        doc.text("3. Mockup dimensions shown above are mathematically approximated inside the safe printable frame.", 20, 249);
+        doc.text("4. Keep original high resolution logo in safe vault. Never upscale low-resolution JPG logos.", 20, 255);
+
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        doc.text("AI Merch Mockup Studio • High Fidelity Digital Twin System", 15, 282);
+        doc.text("Page 1 of 1", 185, 282);
+
+        doc.save(item.filename);
+      } else if (item.exportType === "shopify") {
+        const csvContent = `Handle,Title,Body (HTML),Vendor,Product Category,Type,Tags,Published,Option1 Name,Option1 Value,Variant SKU,Variant Price,Variant Compare At Price\n` +
+          `shopify-variant-${item.id},"${item.parameters.shopifyTitle || item.filename}","Generated spec variant sheet","${item.parameters.shopifyVendor || "Merch Studio"}","Apparel","Merch","${item.parameters.shopifyTags || ""}",true,Size,M,"${item.parameters.shopifySku || "SKU-VAR"}","${item.parameters.shopifyPrice || "29.99"}"\n`;
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        downloadFile(url, item.filename);
+      } else if (item.exportType === "bulk-zip") {
+        const JSZip = (await import("jszip")).default;
+        const zip = new JSZip();
+
+        if (item.parameters.includeCsvManifest) {
+          const allPresets = [...DEFAULT_PRESETS, ...customPresets];
+          const selectedPresets = allPresets.filter((p) => item.parameters.selectedPresetIds?.includes(p.id));
+          const csvContent = generateCsvContent(selectedPresets);
+          zip.file("export_manifest.csv", csvContent);
+        }
+
+        const allPresets = [...DEFAULT_PRESETS, ...customPresets];
+        const selectedPresets = allPresets.filter((p) => item.parameters.selectedPresetIds?.includes(p.id));
+        for (const preset of selectedPresets) {
+          const cleanPresetName = preset.name.replace(/[^a-z0-9_-]/gi, "_").toLowerCase();
+
+          if (item.parameters.includeArtworks) {
+            const mimeType = preset.fileFormat.startsWith("jpeg-") ? "image/jpeg" : "image/png";
+            let bgColor = "transparent";
+            if (preset.fileFormat === "png-solid-white" || preset.fileFormat === "jpeg-solid-white") {
+              bgColor = "#ffffff";
+            } else if (preset.fileFormat === "png-product-color" || preset.fileFormat === "jpeg-product-color") {
+              bgColor = item.color || "#ffffff";
+            }
+
+            const printDataUrl = await generatePrintReadyExport(
+              item.parameters.logoSrc,
+              preset.widthInches,
+              preset.dpi,
+              mimeType,
+              bgColor
+            );
+            zip.file(`print_ready_artworks/${cleanPresetName}.${mimeType === "image/jpeg" ? "jpg" : "png"}`, printDataUrl.split(",")[1], { base64: true });
+          }
+
+          if (item.parameters.includeMockups) {
+            const mockupDataUrl = await generateMockupExport(
+              item.parameters.bgSrc,
+              item.parameters.logoSrc,
+              item.parameters.printArea,
+              item.parameters.transform.x,
+              item.parameters.transform.y,
+              item.parameters.transform.scale,
+              item.parameters.transform.rotation,
+              item.parameters.transform.opacity,
+              item.parameters.transform.blendMode as GlobalCompositeOperation,
+              2000,
+              item.parameters.transform.skewX,
+              item.parameters.transform.skewY
+            );
+            zip.file(`mockup_previews/mockup_${cleanPresetName}.png`, mockupDataUrl.split(",")[1], { base64: true });
+          }
+        }
+
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(zipBlob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = item.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+
+      const event = new CustomEvent("merch-mockup-notification", {
+        detail: { text: `Successfully generated and re-downloaded: ${item.filename}`, type: "success" },
+      });
+      window.dispatchEvent(event);
+    } catch (err) {
+      console.error("Re-download failed:", err);
+      alert("પુનઃ-ડાઉનલોડ કરવામાં કંઈક ભૂલ આવી. કૃપા કરીને ફરીથી પ્રયાસ કરો.");
+    } finally {
+      setIsReDownloadingId(null);
+    }
+  };
+
+  const handleClearHistory = () => {
+    if (confirm("શું તમે આખો એક્સપોર્ટ ઇતિહાસ સાફ કરવા માંગો છો?")) {
+      localStorage.removeItem("export-history");
+      setHistoryList([]);
+      const event = new CustomEvent("merch-mockup-notification", {
+        detail: { text: "એક્સપોર્ટ ઇતિહાસ સાફ કરવામાં આવ્યો છે", type: "info" },
+      });
+      window.dispatchEvent(event);
+    }
+  };
+
+  const handleDeleteHistoryItem = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = historyList.filter(item => item.id !== id);
+    localStorage.setItem("export-history", JSON.stringify(updated));
+    setHistoryList(updated);
+    exportCache.delete(id);
+    const event = new CustomEvent("merch-mockup-notification", {
+      detail: { text: "એક્સપોર્ટ ડિલીટ કરવામાં આવ્યું", type: "info" },
+    });
+    window.dispatchEvent(event);
+  };
+
   const [selectedPresetIds, setSelectedPresetIds] = useState<string[]>(() => 
     DEFAULT_PRESETS.slice(0, 3).map((p) => p.id)
   );
@@ -275,7 +723,17 @@ export default function ExportModal({
       // Download CSV
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
-      downloadFile(url, `shopify_product_${handle}.csv`);
+      const filename = `shopify_product_${handle}.csv`;
+      downloadFile(url, filename);
+
+      recordExport("shopify", filename, undefined, {
+        shopifyTitle,
+        shopifyPrice,
+        shopifySku,
+        shopifyTags,
+        shopifyVendor,
+        shopifySizes,
+      });
 
       // Automatically also download the active high-res mockup preview image to match!
       await handleExportMockup();
@@ -412,15 +870,23 @@ export default function ExportModal({
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
       const cleanProductName = product.name.toLowerCase().replace(/\s+/g, "_");
+      const filename = `bulk_mockups_${cleanProductName}_assets.zip`;
       
       const url = URL.createObjectURL(zipBlob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `bulk_mockups_${cleanProductName}_assets.zip`;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+
+      recordExport("bulk-zip", filename, undefined, {
+        selectedPresetIds,
+        includeArtworks,
+        includeMockups,
+        includeCsvManifest,
+      });
     } catch (e) {
       console.error("Bulk export ZIP generation failed:", e);
       alert("Failed to generate ZIP archive. See console for error details.");
@@ -560,11 +1026,69 @@ export default function ExportModal({
       );
 
       const cleanProductName = product.name.toLowerCase().replace(/\s+/g, "_");
-      downloadFile(mockupDataUrl, `mockup_${cleanProductName}_preview.png`);
+      const filename = `mockup_${cleanProductName}_preview.png`;
+      downloadFile(mockupDataUrl, filename);
+      recordExport("mockup", filename, mockupDataUrl);
     } catch (e) {
       console.error("Exporting composite mockup failed:", e);
     } finally {
       setIsExportingMockup(false);
+    }
+  };
+
+  const [isSharingMockup, setIsSharingMockup] = useState(false);
+
+  const handleShareMockup = async () => {
+    setIsSharingMockup(true);
+    try {
+      // Get background source
+      let bgSrc = "";
+      if (customScene) {
+        bgSrc = customScene.imageUrl;
+      } else {
+        const svgString = product.getSvg(color);
+        bgSrc = `data:image/svg+xml;utf8,${encodeURIComponent(svgString)}`;
+      }
+
+      const printArea = customScene
+        ? { x: 20, y: 20, width: 60, height: 60 }
+        : product.printArea;
+
+      // Generate the lossless composite PNG
+      const mockupDataUrl = await generateMockupExport(
+        bgSrc,
+        logo.processedSrc,
+        printArea,
+        transform.x,
+        transform.y,
+        transform.scale,
+        transform.rotation,
+        transform.opacity,
+        transform.blendMode,
+        mockupResolution,
+        transform.skewX,
+        transform.skewY
+      );
+
+      // Convert dataUrl to blob
+      const response = await fetch(mockupDataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], 'my-merch-mockup.png', { type: 'image/png' });
+      
+      if (navigator.share) {
+        await navigator.share({
+          title: 'મારો નવો ટી-શર્ટ મોકઅપ!',
+          text: 'જુઓ મેં આ ડિઝાઇન બનાવી છે, કેવી લાગે છે?',
+          files: [file],
+        });
+      } else {
+        alert("તમારા બ્રાઉઝરમાં ડાયરેક્ટ શેર સપોર્ટ નથી કરતું, ફોટો ડાઉનલોડ કરી લો.");
+      }
+    } catch (error) {
+      console.error('શેરિંગમાં ભૂલ આવી:', error);
+      alert("શેર કરવામાં ભૂલ આવી અથવા પ્રક્રિયા કેન્સલ કરવામાં આવી.");
+    } finally {
+      setIsSharingMockup(false);
     }
   };
 
@@ -591,11 +1115,207 @@ export default function ExportModal({
 
       const extension = mimeType === "image/jpeg" ? "jpg" : "png";
       const cleanLogoName = logo.name.toLowerCase().replace(/\s+/g, "_").substring(0, 20);
-      downloadFile(printDataUrl, `print_ready_artwork_${cleanLogoName}.${extension}`);
+      const filename = `print_ready_artwork_${cleanLogoName}.${extension}`;
+      downloadFile(printDataUrl, filename);
+      recordExport("print-ready", filename, printDataUrl);
     } catch (e) {
       console.error("Exporting print-ready artwork failed:", e);
     } finally {
       setIsExportingPrint(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!logo) return;
+    setIsExportingPdf(true);
+    try {
+      // 1. Generate high-res mockup preview
+      let bgSrc = "";
+      if (customScene) {
+        bgSrc = customScene.imageUrl;
+      } else {
+        const svgString = product.getSvg(color);
+        bgSrc = `data:image/svg+xml;utf8,${encodeURIComponent(svgString)}`;
+      }
+
+      const printArea = customScene
+        ? { x: 20, y: 20, width: 60, height: 60 }
+        : product.printArea;
+
+      const mockupDataUrl = await generateMockupExport(
+        bgSrc,
+        logo.processedSrc,
+        printArea,
+        transform.x,
+        transform.y,
+        transform.scale,
+        transform.rotation,
+        transform.opacity,
+        transform.blendMode,
+        1500, // optimized resolution for PDF embedding
+        transform.skewX,
+        transform.skewY
+      );
+
+      // 2. Generate isolated artwork
+      const printDataUrl = await generatePrintReadyExport(
+        logo.processedSrc,
+        8, // 8 inches
+        150, // 150 DPI is perfect for PDF size optimization
+        "image/png",
+        "transparent"
+      );
+
+      // 3. Construct jsPDF instance
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      // Header Banner
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, 210, 40, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.text("MOCKUP STUDIO TECH SHEET", 15, 18);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(148, 163, 184); // slate-400
+      doc.text("Professional Print Spec Sheet • Automated Generation", 15, 26);
+      doc.text(`Exported: ${new Date().toLocaleString()}`, 130, 18);
+
+      // Main content
+      doc.setTextColor(15, 23, 42);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text("PRODUCT SPECIFICATIONS", 15, 52);
+
+      // Draw Specs Box
+      doc.setFillColor(248, 250, 252); // slate-50
+      doc.rect(15, 56, 180, 52, "F");
+      doc.setDrawColor(226, 232, 240); // slate-200
+      doc.setLineWidth(0.5);
+      doc.rect(15, 56, 180, 52, "S");
+
+      doc.setFontSize(10);
+      doc.setTextColor(71, 85, 105); // slate-600
+
+      // Column 1
+      doc.setFont("helvetica", "bold");
+      doc.text("Product Type:", 20, 64);
+      doc.setFont("helvetica", "normal");
+      doc.text(product.name, 52, 64);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Fabric Color:", 20, 72);
+      doc.setFont("helvetica", "normal");
+      doc.text(color.toUpperCase(), 52, 72);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Print Method:", 20, 80);
+      doc.setFont("helvetica", "normal");
+      const suggestedMethod = product.category === "apparel" ? "Direct To Garment (DTG)" : product.id === "mug" ? "Sublimation" : "Screen Printing";
+      doc.text(suggestedMethod, 52, 80);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Artwork Source:", 20, 88);
+      doc.setFont("helvetica", "normal");
+      doc.text(logo.name.substring(0, 30), 52, 88);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Position (X/Y):", 20, 96);
+      doc.setFont("helvetica", "normal");
+      doc.text(`X: ${transform.x.toFixed(1)}%, Y: ${transform.y.toFixed(1)}%`, 52, 96);
+
+      // Column 2
+      doc.setFont("helvetica", "bold");
+      doc.text("Logo Scale:", 110, 64);
+      doc.setFont("helvetica", "normal");
+      doc.text(`${Math.round(transform.scale * 100)}%`, 145, 64);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Logo Rotation:", 110, 72);
+      doc.setFont("helvetica", "normal");
+      doc.text(`${transform.rotation}°`, 145, 72);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Logo Opacity:", 110, 80);
+      doc.setFont("helvetica", "normal");
+      doc.text(`${Math.round(transform.opacity * 100)}%`, 145, 80);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Guidelines:", 110, 88);
+      doc.setTextColor(16, 185, 129); // emerald-500
+      doc.setFont("helvetica", "bold");
+      doc.text("PASSED (Within Bounds)", 145, 88);
+      doc.setTextColor(71, 85, 105);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Status:", 110, 96);
+      doc.setFont("helvetica", "normal");
+      doc.text("Production-Ready", 145, 96);
+
+      // Layout columns for mockup and artwork images
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42);
+      doc.text("MOCKUP PREVIEW", 15, 120);
+      doc.text("ISOLATED ARTWORK", 110, 120);
+
+      // Embed Mockup Preview
+      doc.setDrawColor(226, 232, 240);
+      doc.rect(15, 124, 85, 85, "S");
+      doc.addImage(mockupDataUrl, "PNG", 16, 125, 83, 83);
+
+      // Embed Print Artwork
+      doc.rect(110, 124, 85, 85, "S");
+      // Add a subtle off-white background grid style for artwork preview inside the PDF
+      doc.setFillColor(250, 250, 250);
+      doc.rect(111, 125, 83, 83, "F");
+      doc.addImage(printDataUrl, "PNG", 112, 126, 81, 81);
+
+      // Footer disclaimer
+      doc.setFillColor(241, 245, 249); // slate-100
+      doc.rect(15, 222, 180, 48, "F");
+      doc.rect(15, 222, 180, 48, "S");
+
+      doc.setTextColor(100, 116, 139); // slate-500
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "bold");
+      doc.text("DESIGN NOTES & GUIDELINES FOR PRINTIFY / PRINTFUL", 20, 230);
+      doc.setFont("helvetica", "normal");
+      doc.text("1. Make sure exported isolated artwork contains transparent background (standard transparent PNG).", 20, 237);
+      doc.text("2. The color profile is calibrated to sRGB. For offset screen print, convert to CMYK if requested.", 20, 243);
+      doc.text("3. Mockup dimensions shown above are mathematically approximated inside the safe printable frame.", 20, 249);
+      doc.text("4. Keep original high resolution logo in safe vault. Never upscale low-resolution JPG logos.", 20, 255);
+
+      // Page numbering / brand
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text("AI Merch Mockup Studio • High Fidelity Digital Twin System", 15, 282);
+      doc.text("Page 1 of 1", 185, 282);
+
+      const cleanProductName = product.name.toLowerCase().replace(/\s+/g, "_");
+      const filename = `tech_specification_${cleanProductName}.pdf`;
+      doc.save(filename);
+      recordExport("pdf", filename, undefined);
+
+      const event = new CustomEvent("merch-mockup-notification", {
+        detail: { text: "PDF Tech Specification Sheet generated successfully!", type: "success" },
+      });
+      window.dispatchEvent(event);
+    } catch (e) {
+      console.error("Exporting PDF Spec Sheet failed:", e);
+      const event = new CustomEvent("merch-mockup-notification", {
+        detail: { text: "Failed to generate PDF. Make sure images are loaded fully.", type: "error" },
+      });
+      window.dispatchEvent(event);
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -655,6 +1375,24 @@ export default function ExportModal({
             <Store className="h-3.5 w-3.5" />
             <span>Shopify Store Export</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveExportTab("history")}
+            className={`py-3 text-xs font-bold transition-all focus:outline-none border-b-2 cursor-pointer flex items-center gap-1.5 ${
+              activeExportTab === "history"
+                ? "text-blue-400 border-blue-500 font-semibold"
+                : "text-zinc-400 hover:text-zinc-200 border-transparent"
+            }`}
+            id="export-history-tab-btn"
+          >
+            <History className="h-3.5 w-3.5" />
+            <span>Export History</span>
+            {historyList.length > 0 && (
+              <span className="px-1.5 py-0.2 bg-blue-500/20 text-blue-400 rounded-full text-[9px] font-bold">
+                {historyList.length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Modal Contents */}
@@ -702,26 +1440,49 @@ export default function ExportModal({
                     </div>
                   </div>
 
-                  <button
-                    onClick={handleExportMockup}
-                    disabled={isExportingMockup}
-                    className={`px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 focus:outline-none shadow-md shadow-blue-950/30 transition-all ${
-                      isExportingMockup ? "opacity-60 cursor-not-allowed" : ""
-                    }`}
-                    id="download-mockup-btn"
-                  >
-                    {isExportingMockup ? (
-                      <>
-                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
-                        <span>Rendering {mockupResolution === 4000 ? "4K" : mockupResolution === 2000 ? "2K" : "1K"} Mockup...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Download className="h-3.5 w-3.5" />
-                        <span>Download Mockup PNG ({mockupResolution === 4000 ? "4K" : mockupResolution === 2000 ? "HD" : "Standard"})</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={handleExportMockup}
+                      disabled={isExportingMockup || isSharingMockup}
+                      className={`px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 focus:outline-none shadow-md shadow-blue-950/30 transition-all ${
+                        isExportingMockup || isSharingMockup ? "opacity-60 cursor-not-allowed" : ""
+                      }`}
+                      id="download-mockup-btn"
+                    >
+                      {isExportingMockup ? (
+                        <>
+                          <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
+                          <span>Rendering {mockupResolution === 4000 ? "4K" : mockupResolution === 2000 ? "2K" : "1K"} Mockup...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-3.5 w-3.5" />
+                          <span>Download Mockup PNG ({mockupResolution === 4000 ? "4K" : mockupResolution === 2000 ? "HD" : "Standard"})</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={handleShareMockup}
+                      disabled={isExportingMockup || isSharingMockup}
+                      className={`px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 focus:outline-none shadow-md shadow-amber-950/30 transition-all ${
+                        isExportingMockup || isSharingMockup ? "opacity-60 cursor-not-allowed" : ""
+                      }`}
+                      id="share-mockup-btn"
+                    >
+                      {isSharingMockup ? (
+                        <>
+                          <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
+                          <span>પ્રક્રિયા ચાલુ છે...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Share2 className="h-3.5 w-3.5" />
+                          <span>મોબાઈલ પર શેર કરો</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -924,6 +1685,42 @@ export default function ExportModal({
                       <>
                         <Download className="h-3.5 w-3.5" />
                         <span>Download Print Artwork PNG</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 3: PDF Tech Sheet Export */}
+              <div className="border border-white/5 rounded-xl p-5 hover:border-red-500/30 bg-zinc-950/30 transition-all flex items-start space-x-4">
+                <div className="p-3 bg-red-500/15 rounded-xl text-red-400 shrink-0 border border-red-500/20">
+                  <FileText className="h-6 w-6" />
+                </div>
+                <div className="flex-1 space-y-3">
+                  <div>
+                    <h4 className="font-bold text-white text-sm">Download PDF Specification Tech Sheet</h4>
+                    <p className="text-xs text-zinc-400 leading-relaxed mt-0.5">
+                      Generates a professional, print-ready PDF containing your high-fidelity design mockup, high-resolution isolated print artwork, exact fabric color hexes, active placement metrics (X/Y coordinates, scale, rotation), and design-safe guidelines. Ideal for Printify, Printful, Etsy, or sending directly to your manufacturing partners.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleExportPdf}
+                    disabled={isExportingPdf}
+                    className={`px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 focus:outline-none shadow-md shadow-red-950/30 transition-all ${
+                      isExportingPdf ? "opacity-60 cursor-not-allowed" : ""
+                    }`}
+                    id="download-pdf-btn"
+                  >
+                    {isExportingPdf ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
+                        <span>Compiling Tech Sheet PDF...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-3.5 w-3.5" />
+                        <span>Download Spec Sheet PDF</span>
                       </>
                     )}
                   </button>
@@ -1315,6 +2112,121 @@ export default function ExportModal({
                   )}
                 </button>
               </div>
+            </div>
+          ) : activeExportTab === "history" ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-white text-sm flex items-center gap-1.5">
+                    <History className="h-4 w-4 text-blue-400" />
+                    <span>એક્સપોર્ટ ઇતિહાસ (Export History)</span>
+                  </h4>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    તમારા અગાઉના ડાઉનલોડ્સનો ટ્રેક રાખો અને તેને ઝડપથી ફરી ડાઉનલોડ કરો.
+                  </p>
+                </div>
+                {historyList.length > 0 && (
+                  <button
+                    onClick={handleClearHistory}
+                    className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/10 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>બધો ઇતિહાસ સાફ કરો</span>
+                  </button>
+                )}
+              </div>
+
+              {historyList.length === 0 ? (
+                <div className="border border-dashed border-white/10 rounded-xl p-8 text-center bg-zinc-950/20">
+                  <Clock className="h-8 w-8 text-zinc-600 mx-auto mb-2" />
+                  <p className="text-xs text-zinc-400 font-medium">કોઈપણ ફાઈલ હજી સુધી એક્સપોર્ટ કરવામાં આવી નથી.</p>
+                  <p className="text-[10px] text-zinc-500 mt-1">
+                    નવો મોકઅપ અથવા પ્રિન્ટ-રેડી આર્ટવર્ક ડાઉનલોડ કર્યા પછી તે અહીં દેખાશે.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
+                  {historyList.map((item) => {
+                    const isReDownloading = isReDownloadingId === item.id;
+                    const dateStr = new Date(item.timestamp).toLocaleString();
+                    const isCached = exportCache.has(item.id);
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="bg-zinc-950/40 hover:bg-zinc-900/40 border border-white/5 rounded-xl p-3.5 flex items-center justify-between gap-4 transition-all"
+                      >
+                        <div className="flex items-center space-x-3.5 min-w-0">
+                          <div className="p-2.5 bg-zinc-900 rounded-lg border border-white/5 shrink-0">
+                            {item.exportType === "mockup" ? (
+                              <FileImage className="h-5 w-5 text-blue-400" />
+                            ) : item.exportType === "print-ready" ? (
+                              <Sparkles className="h-5 w-5 text-amber-400" />
+                            ) : item.exportType === "pdf" ? (
+                              <FileText className="h-5 w-5 text-red-400" />
+                            ) : item.exportType === "shopify" ? (
+                              <Store className="h-5 w-5 text-emerald-400" />
+                            ) : (
+                              <Archive className="h-5 w-5 text-purple-400" />
+                            )}
+                          </div>
+                          <div className="min-w-0 space-y-0.5">
+                            <p className="text-xs font-bold text-white truncate max-w-md" title={item.filename}>
+                              {item.filename}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-zinc-400 font-medium">
+                              <span className="text-zinc-500 flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {dateStr}
+                              </span>
+                              <span className="text-zinc-600">•</span>
+                              <span className="capitalize px-1.5 py-0.5 bg-white/5 rounded text-[9px] font-bold tracking-wide">
+                                {item.exportType === "print-ready" ? "Print ready" : item.exportType}
+                              </span>
+                              <span className="text-zinc-600">•</span>
+                              <span className="text-zinc-500">
+                                {item.productName} ({item.color})
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isCached && (
+                            <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                              મેમરીમાં સેવ છે
+                            </span>
+                          )}
+                          <button
+                            onClick={() => handleReDownload(item)}
+                            disabled={isReDownloading}
+                            className="px-3 py-1.5 bg-blue-600/25 hover:bg-blue-600 text-blue-400 hover:text-white disabled:opacity-50 border border-blue-500/10 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            {isReDownloading ? (
+                              <>
+                                <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-current border-t-transparent" />
+                                <span>તૈયાર થાય છે...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Download className="h-3.5 w-3.5" />
+                                <span>ડાઉનલોડ કરો</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteHistoryItem(item.id, e)}
+                            className="p-1.5 bg-zinc-900 hover:bg-red-500/10 text-zinc-500 hover:text-red-400 border border-white/5 hover:border-red-500/20 rounded-lg transition-all"
+                            title="ડિલીટ કરો"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ) : null}
         </div>

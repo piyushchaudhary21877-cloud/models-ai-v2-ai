@@ -1155,6 +1155,40 @@ export default function ControlPanel({
             })}
           </div>
 
+          {/* Fabric Texture Dropdown */}
+          <div className="space-y-1.5 pt-1">
+            <div className="flex items-center justify-between text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+              <span>Fabric Texture Type</span>
+            </div>
+            <select
+              id="fabric-texture-select"
+              value={["heavy_cotton", "vintage_wash", "satin", "denim"].includes(transform.textureType || "") ? transform.textureType : ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) {
+                  handleTransformFieldChange("textureType", val as any);
+                  const labels: Record<string, string> = {
+                    heavy_cotton: "Heavy Cotton",
+                    vintage_wash: "Vintage Wash",
+                    satin: "Satin",
+                    denim: "Denim"
+                  };
+                  notify(`Applied ${labels[val]} fabric texture`, "info");
+                } else {
+                  handleTransformFieldChange("textureType", "none");
+                  notify("Removed fabric texture", "info");
+                }
+              }}
+              className="w-full text-xs border border-white/10 rounded-lg p-2 bg-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500 text-white cursor-pointer"
+            >
+              <option value="">-- No Fabric Texture --</option>
+              <option value="heavy_cotton">Heavy Cotton</option>
+              <option value="vintage_wash">Vintage Wash</option>
+              <option value="satin">Satin</option>
+              <option value="denim">Denim</option>
+            </select>
+          </div>
+
           {transform.textureType && transform.textureType !== "none" && (
             <div className="space-y-1.5 pt-1 animate-fadeIn">
               <div className="flex items-center justify-between text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
@@ -1179,6 +1213,66 @@ export default function ControlPanel({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Drop Shadow Effects */}
+      <div className="border border-white/5 bg-zinc-950/40 rounded-xl p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="p-1 bg-amber-500/10 rounded border border-amber-500/15 text-amber-400">
+              <Sparkles className="h-3 w-3" />
+            </div>
+            <span className="text-xs font-bold text-white tracking-wide uppercase">Logo Drop Shadow</span>
+          </div>
+          
+          <button
+            type="button"
+            onClick={() => {
+              const nextVal = !transform.dropShadowEnabled;
+              handleTransformFieldChange("dropShadowEnabled", nextVal);
+              notify(nextVal ? "Enabled Logo Drop Shadow" : "Disabled Logo Drop Shadow", "info");
+            }}
+            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              transform.dropShadowEnabled ? "bg-amber-500" : "bg-zinc-800"
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                transform.dropShadowEnabled ? "translate-x-4" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
+
+        <p className="text-[10px] text-zinc-500 leading-relaxed">
+          Apply a realistic soft contact shadow or lift effect behind the custom logo graphic to enhance depth on fabrics.
+        </p>
+
+        {transform.dropShadowEnabled && (
+          <div className="space-y-3.5 pt-1 animate-fadeIn">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                <span>Shadow Intensity</span>
+                <span className="font-mono bg-zinc-800 border border-white/5 px-1.5 py-0.5 rounded text-[9px] text-zinc-300">
+                  {Math.round((transform.dropShadowIntensity ?? 0.5) * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                value={transform.dropShadowIntensity ?? 0.5}
+                onChange={(e) => handleTransformFieldChange("dropShadowIntensity", parseFloat(e.target.value))}
+                onMouseDown={() => setIsAdjusting(true)}
+                onMouseUp={() => setIsAdjusting(false)}
+                onTouchStart={() => setIsAdjusting(true)}
+                onTouchEnd={() => setIsAdjusting(false)}
+                className="w-full slider-input cursor-pointer"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Background Removal Toolkit */}

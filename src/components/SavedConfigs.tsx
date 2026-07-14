@@ -5,11 +5,11 @@ import { apiFetch } from "../utils/api";
  */
 
 import React, { useState, useEffect } from "react";
-import { Save, FolderOpen, Trash2, Calendar, Check, AlertCircle, ShoppingBag, Star, Briefcase, User, Tag, Sparkles, SlidersHorizontal, FolderPlus, Folder, Plus, X, Download, Upload, Search, Maximize2, Square, CheckSquare, ZoomIn, ZoomOut, RotateCcw, Hand, GripVertical, Keyboard, Copy, Archive } from "lucide-react";
+import { Save, FolderOpen, Trash2, Calendar, Check, AlertCircle, ShoppingBag, Star, Briefcase, User, Tag, Sparkles, SlidersHorizontal, FolderPlus, Folder, Plus, X, Download, Upload, Search, Maximize2, Square, CheckSquare, ZoomIn, ZoomOut, RotateCcw, Hand, GripVertical, Keyboard, Copy, Archive, Gift, FlaskConical } from "lucide-react";
 import { SavedConfig, LogoData, LogoTransform, BackgroundRemovalSettings, MockupScene } from "../types";
 import { PRODUCTS, ProductPreset } from "../data/templates";
 
-const DEFAULT_CATEGORIES = ["General", "Favorites", "Projects", "Archive", "T-shirts", "Hoodies", "Office"];
+const DEFAULT_CATEGORIES = ["General", "Favorites", "Projects", "Archive", "T-shirts", "Hoodies", "Office", "Holiday", "Merch", "Experimental"];
 
 const getCategoryIcon = (category: string) => {
   switch (category) {
@@ -29,6 +29,12 @@ const getCategoryIcon = (category: string) => {
       return <Folder className="h-3.5 w-3.5 text-violet-400" />;
     case "Office":
       return <Briefcase className="h-3.5 w-3.5 text-teal-400" />;
+    case "Holiday":
+      return <Gift className="h-3.5 w-3.5 text-rose-400" />;
+    case "Merch":
+      return <Tag className="h-3.5 w-3.5 text-orange-400" />;
+    case "Experimental":
+      return <FlaskConical className="h-3.5 w-3.5 text-fuchsia-400" />;
     default:
       return <Folder className="h-3.5 w-3.5 text-blue-400" />;
   }
@@ -52,6 +58,12 @@ const getCategoryStyles = (category: string) => {
       return "bg-violet-500/10 text-violet-400 border-violet-500/20";
     case "Office":
       return "bg-teal-500/10 text-teal-400 border-teal-500/20";
+    case "Holiday":
+      return "bg-rose-500/10 text-rose-400 border-rose-500/20";
+    case "Merch":
+      return "bg-orange-500/10 text-orange-400 border-orange-500/20";
+    case "Experimental":
+      return "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20";
     default:
       return "bg-zinc-800 text-zinc-300 border-zinc-700/50";
   }
@@ -906,7 +918,7 @@ export default function SavedConfigs({
             <div className="flex flex-wrap gap-1.5">
               {categories.map((cat) => {
                 const isActive = selectedCategory === cat;
-                const isCore = ["General", "Favorites", "Projects", "Archive", "Work", "Personal"].includes(cat);
+                const isCore = ["General", "Favorites", "Projects", "Archive", "Work", "Personal", "Holiday", "Merch", "Experimental"].includes(cat);
                 return (
                   <div key={cat} className="relative group/cat flex items-center">
                     <button
@@ -922,6 +934,12 @@ export default function SavedConfigs({
                             ? "bg-zinc-500/10 border-zinc-500/40 text-zinc-400 shadow-lg shadow-zinc-950/20"
                             : cat === "Work" || cat === "Office" || cat === "T-shirts" || cat === "Hoodies"
                             ? "bg-indigo-500/10 border-indigo-500/40 text-indigo-300 shadow-lg shadow-indigo-950/20"
+                            : cat === "Holiday"
+                            ? "bg-rose-500/10 border-rose-500/40 text-rose-300 shadow-lg shadow-rose-950/20"
+                            : cat === "Merch"
+                            ? "bg-orange-500/10 border-orange-500/40 text-orange-300 shadow-lg shadow-orange-950/20"
+                            : cat === "Experimental"
+                            ? "bg-fuchsia-500/10 border-fuchsia-500/40 text-fuchsia-300 shadow-lg shadow-fuchsia-950/20"
                             : "bg-blue-500/10 border-blue-500/40 text-blue-300 shadow-lg"
                           : "bg-zinc-900/40 border-white/5 text-zinc-400 hover:bg-zinc-900/80 hover:text-zinc-200"
                       }`}
@@ -935,7 +953,10 @@ export default function SavedConfigs({
                       {cat === "T-shirts" && <ShoppingBag className="h-3 w-3 shrink-0 text-emerald-400" />}
                       {cat === "Hoodies" && <Folder className="h-3 w-3 shrink-0 text-violet-400" />}
                       {cat === "Office" && <Briefcase className="h-3 w-3 shrink-0 text-teal-400" />}
-                      {!["Favorites", "Projects", "Archive", "Work", "Personal", "General", "T-shirts", "Hoodies", "Office"].includes(cat) && <Folder className="h-3 w-3 shrink-0 text-blue-400" />}
+                      {cat === "Holiday" && <Gift className="h-3 w-3 shrink-0 text-rose-400" />}
+                      {cat === "Merch" && <Tag className="h-3 w-3 shrink-0 text-orange-400" />}
+                      {cat === "Experimental" && <FlaskConical className="h-3 w-3 shrink-0 text-fuchsia-400" />}
+                      {!["Favorites", "Projects", "Archive", "Work", "Personal", "General", "T-shirts", "Hoodies", "Office", "Holiday", "Merch", "Experimental"].includes(cat) && <Folder className="h-3 w-3 shrink-0 text-blue-400" />}
                       <span>{cat}</span>
                     </button>
                     {!isCore && (
@@ -1180,6 +1201,12 @@ export default function SavedConfigs({
                           ? "bg-violet-500/10 text-violet-300 border-violet-500/30 ring-1 ring-violet-500/20"
                         : tab === "Office"
                           ? "bg-teal-500/10 text-teal-300 border-teal-500/30 ring-1 ring-teal-500/20"
+                        : tab === "Holiday"
+                          ? "bg-rose-500/10 text-rose-300 border-rose-500/30 ring-1 ring-rose-500/20"
+                        : tab === "Merch"
+                          ? "bg-orange-500/10 text-orange-300 border-orange-500/30 ring-1 ring-orange-500/20"
+                        : tab === "Experimental"
+                          ? "bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/30 ring-1 ring-fuchsia-500/20"
                         : "bg-blue-500/10 text-blue-300 border-blue-500/30 ring-1 ring-blue-500/20"
                       : "bg-zinc-950/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border-white/5"
                     }`}
@@ -1575,7 +1602,7 @@ export default function SavedConfigs({
                                 top: `calc(50% + ${config.transform.y}%)`,
                                 transform: `translate(-50%, -50%) rotate(${config.transform.rotation}deg) scale(${config.transform.scale})`,
                                 opacity: config.transform.opacity,
-                                mixBlendMode: config.transform.blendMode || "normal",
+                                mixBlendMode: (config.transform.blendMode || "normal") as any,
                               }}
                               referrerPolicy="no-referrer"
                             />
@@ -1847,7 +1874,7 @@ export default function SavedConfigs({
                           top: `calc(50% + ${hoveredPreviewConfig.transform.y}%)`,
                           transform: `translate(-50%, -50%) rotate(${hoveredPreviewConfig.transform.rotation}deg) scale(${hoveredPreviewConfig.transform.scale})`,
                           opacity: hoveredPreviewConfig.transform.opacity,
-                          mixBlendMode: hoveredPreviewConfig.transform.blendMode || "normal",
+                          mixBlendMode: (hoveredPreviewConfig.transform.blendMode || "normal") as any,
                         }}
                         referrerPolicy="no-referrer"
                       />
@@ -2009,7 +2036,7 @@ export default function SavedConfigs({
                           top: `calc(50% + ${selectedLightboxConfig.transform.y}%)`,
                           transform: `translate(-50%, -50%) rotate(${selectedLightboxConfig.transform.rotation}deg) scale(${selectedLightboxConfig.transform.scale})`,
                           opacity: selectedLightboxConfig.transform.opacity,
-                          mixBlendMode: selectedLightboxConfig.transform.blendMode || "normal",
+                          mixBlendMode: (selectedLightboxConfig.transform.blendMode || "normal") as any,
                         }}
                         referrerPolicy="no-referrer"
                       />

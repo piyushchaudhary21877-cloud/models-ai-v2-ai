@@ -91,3 +91,22 @@ body {
 .slider-input::-webkit-slider-thumb:hover {
   transform: scale(1.2);
 }
+
+/* User-defined CSS fixes for main container and mockup output */
+.mockup-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 480px; /* મોબાઈલ સ્ક્રીન સાઈઝ માટે ફિક્સ */
+  margin: 0 auto;
+  padding: 15px;
+}
+
+img.mockup-output {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  border-radius: 12px; /* પ્રીમિયમ લુક માટે */
+}
+

@@ -20,8 +20,10 @@ export interface LogoTransform {
   perspective?: number; // 3D perspective depth
   flipX?: boolean; // Horizontal flip (mirroring)
   flipY?: boolean; // Vertical flip (mirroring)
-  textureType?: "none" | "grain" | "heather" | "distressed";
+  textureType?: "none" | "grain" | "heather" | "distressed" | "heavy_cotton" | "vintage_wash" | "satin" | "denim";
   textureIntensity?: number; // value between 0 and 1
+  dropShadowEnabled?: boolean;
+  dropShadowIntensity?: number; // value between 0 and 1
 }
 
 export interface BackgroundRemovalSettings {

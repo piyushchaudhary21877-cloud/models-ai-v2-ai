@@ -159,6 +159,8 @@ export default function App() {
     flipY: false,
     textureType: "none",
     textureIntensity: 0.35,
+    dropShadowEnabled: false,
+    dropShadowIntensity: 0.5,
   });
 
   // Background removal properties
@@ -487,18 +489,26 @@ export default function App() {
     let active = true;
 
     async function processLogo() {
-      if (isBgRemovalEnabled) {
-        const processed = await removeImageBackground(
-          activeLogoSrc,
-          bgRemovalColorKey,
-          bgRemovalCustomColorHex,
-          bgRemovalTolerance
-        );
-        if (active) {
-          setProcessedLogoSrc(processed);
+      try {
+        if (isBgRemovalEnabled) {
+          const processed = await removeImageBackground(
+            activeLogoSrc,
+            bgRemovalColorKey,
+            bgRemovalCustomColorHex,
+            bgRemovalTolerance
+          );
+          if (active) {
+            setProcessedLogoSrc(processed);
+          }
+        } else {
+          if (active) {
+            setProcessedLogoSrc(activeLogoSrc);
+          }
         }
-      } else {
+      } catch (error) {
+        console.error("Failed to process logo background removal:", error);
         if (active) {
+          // Fall back to original logo source on processing failure
           setProcessedLogoSrc(activeLogoSrc);
         }
       }
@@ -1116,6 +1126,7 @@ export default function App() {
                 isAdjusting={isAdjusting}
                 snapToGrid={snapToGrid}
                 punchline={punchline}
+                onPunchlineChange={setPunchline}
               />
             </div>
 

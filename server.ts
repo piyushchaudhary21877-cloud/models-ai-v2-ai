@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 
@@ -750,6 +750,28 @@ Return ONLY the raw JSON block. No markdown, no wrapping in codeblocks, no intro
       contents: prompt,
       config: {
         responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          description: "An array of exactly 5 curated, professional, brand-aligned color recommendations",
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: {
+                type: Type.STRING,
+                description: "A premium retail color name (e.g., 'Pacific Slate', 'Vintage Sand')"
+              },
+              hex: {
+                type: Type.STRING,
+                description: "The valid CSS hex color code starting with # (e.g., '#2c3e50')"
+              },
+              rationale: {
+                type: Type.STRING,
+                description: "A short 1-sentence description explaining why this specific fabric color works perfectly with the logo and product type."
+              }
+            },
+            required: ["name", "hex", "rationale"]
+          }
+        }
       },
     });
 
@@ -951,6 +973,50 @@ Do NOT include any markdown formatting, do NOT write \`\`\`json, do NOT include 
       contents: promptMessage,
       config: {
         responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          description: "An array of exactly 10 unique, highly creative and retail-ready merchandise design concept objects",
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              title: {
+                type: Type.STRING,
+                description: "A catchy, professional retail-ready product name"
+              },
+              description: {
+                type: Type.STRING,
+                description: "A highly compelling, emotional, and marketing-focused description (1-2 sentences)"
+              },
+              colors: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.STRING
+                },
+                description: "An array of 3 distinct hex color codes"
+              },
+              font: {
+                type: Type.STRING,
+                description: "A premium font recommendation that fits the aesthetic"
+              },
+              seoKeywords: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.STRING
+                },
+                description: "An array of 5 to 7 high-performing SEO keywords"
+              },
+              prompt: {
+                type: Type.STRING,
+                description: "A highly specific, descriptive text-to-image prompt to generate this graphic"
+              },
+              productType: {
+                type: Type.STRING,
+                description: "The specific merchandise type this design is optimized for"
+              }
+            },
+            required: ["title", "description", "colors", "font", "seoKeywords", "prompt", "productType"]
+          }
+        }
       },
     });
 

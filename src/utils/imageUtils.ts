@@ -119,28 +119,30 @@ export async function generateMockupExport(
   logoSkewX?: number,
   logoSkewY?: number
 ): Promise<string> {
+  // Guard: Limit canvas size to max 8192px to prevent memory overflow and crashes
+  const size = Math.min(canvasSize, 8192);
   const canvas = document.createElement("canvas");
-  canvas.width = canvasSize;
-  canvas.height = canvasSize;
+  canvas.width = size;
+  canvas.height = size;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not create high-res rendering context");
   
   // Fill high-res canvas with crisp transparency or white background
-  ctx.clearRect(0, 0, canvasSize, canvasSize);
+  ctx.clearRect(0, 0, size, size);
   
   // Load background product (SVG)
   const productImg = await loadImage(productSvgSrc);
-  ctx.drawImage(productImg, 0, 0, canvasSize, canvasSize);
+  ctx.drawImage(productImg, 0, 0, size, size);
   
   if (logoSrc) {
     try {
       const logoImg = await loadImage(logoSrc);
       
       // Calculate active print box inside the canvas size
-      const pX = (printArea.x / 100) * canvasSize;
-      const pY = (printArea.y / 100) * canvasSize;
-      const pW = (printArea.width / 100) * canvasSize;
-      const pH = (printArea.height / 100) * canvasSize;
+      const pX = (printArea.x / 100) * size;
+      const pY = (printArea.y / 100) * size;
+      const pW = (printArea.width / 100) * size;
+      const pH = (printArea.height / 100) * size;
       
       // Compute logo dimensions fitting within print area natively
       const aspect = logoImg.naturalWidth / logoImg.naturalHeight || 1;
@@ -210,8 +212,21 @@ export async function generatePrintReadyExport(
   const targetPixels = widthInches * dpi;
   const aspect = logoImg.naturalWidth / logoImg.naturalHeight || 1;
   
-  canvas.width = targetPixels;
-  canvas.height = targetPixels / aspect;
+  // Guard: Limit maximum canvas size to 8192px on any dimension to avoid memory crashes
+  let w = targetPixels;
+  let h = targetPixels / aspect;
+  const MAX_CANVAS_DIMENSION = 8192;
+  if (w > MAX_CANVAS_DIMENSION) {
+    w = MAX_CANVAS_DIMENSION;
+    h = w / aspect;
+  }
+  if (h > MAX_CANVAS_DIMENSION) {
+    h = MAX_CANVAS_DIMENSION;
+    w = h * aspect;
+  }
+  
+  canvas.width = Math.round(w);
+  canvas.height = Math.round(h);
   
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not create print rendering context");

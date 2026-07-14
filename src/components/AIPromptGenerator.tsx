@@ -190,7 +190,7 @@ export default function AIPromptGenerator({
       const data = await res.json();
       if (data.success && data.ideas) {
         setGeneratedIdeas(data.ideas);
-        setActiveGenerationMode(data.mode);
+        setActiveGenerationMode(data.mode as "ai" | "offline");
         setShowOnlyFavorites(false);
 
         // Record into history
